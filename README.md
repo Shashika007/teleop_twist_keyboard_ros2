@@ -1,9 +1,13 @@
 # teleop_twist_keyboard
-Generic Keyboard Teleoperation for ROS
+Generic Keyboard Teleoperation for ROS2 
+
+## Build
+
+To build: `colcon build --packages-select teleop_twist_keyboard_trio --symlink-install`
 
 ## Launch
 
-To run: `ros2 run teleop_twist_keyboard teleop_twist_keyboard`
+To run: `ros2 run teleop_twist_keyboard_trio teleop_keyboard`
 
 ## Usage
 
