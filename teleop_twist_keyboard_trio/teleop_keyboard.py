@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # Copyright 2011 Brown University Robotics.
 # Copyright 2017 Open Source Robotics Foundation, Inc.
 # All rights reserved.
@@ -35,6 +36,7 @@ import sys
 
 import geometry_msgs.msg
 import rclpy
+from rclpy.node import Node
 
 if sys.platform == 'win32':
     import msvcrt
@@ -100,6 +102,17 @@ speedBindings = {
     'c': (1, .9),
 }
 
+def saveTerminalSettings():
+       if sys.platform == 'win32':
+           return None
+       return termios.tcgetattr(sys.stdin)
+
+
+def restoreTerminalSettings(old_settings):
+    if sys.platform == 'win32':
+        return
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
 
 def getKey(settings):
     if sys.platform == 'win32':
@@ -112,89 +125,81 @@ def getKey(settings):
         termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
     return key
 
+class publisherTeleop(Node):
+    def __init__(self):
+        super().__init__("teleop_keyboard")
+        self.settings = saveTerminalSettings()
+        self.publisher_ = self.create_publisher(
+            geometry_msgs.msg.Twist, "cmd_vel", 10)
+        self.speed = 0.5
+        self.turn = 1.0
+        self.x = 0.0
+        self.y = 0.0
+        self.z = 0.0
+        self.th = 0.0
+        self.status = 0.0
+        self.get_logger().info("Teleop node has Initialized ~")
 
-def saveTerminalSettings():
-    if sys.platform == 'win32':
-        return None
-    return termios.tcgetattr(sys.stdin)
 
+    def vels(self,speed, turn):
+        return 'currently:\tspeed %s\tturn %s ' % (self.speed, self.turn)
 
-def restoreTerminalSettings(old_settings):
-    if sys.platform == 'win32':
-        return
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    def publish_teleop(self):
+        try:
+            print(msg)
+            print(self.vels(self.speed, self.turn))
+            while True:
+                key = getKey(self.settings)
+                if key in moveBindings.keys():
+                    self.x = moveBindings[key][0]
+                    self.y = moveBindings[key][1]
+                    self.z = moveBindings[key][2]
+                    self.th = moveBindings[key][3]
+                elif key in speedBindings.keys():
+                    self.speed = self.speed * speedBindings[key][0]
+                    self.turn = self.turn * speedBindings[key][1]
+                    print(self.vels(self.speed, self.turn))
+                    if (self.status == 14):
+                        print(msg)
+                    self.status = (self.status + 1) % 15
+                else:
+                    self.x = 0.0
+                    self.y = 0.0
+                    self.z = 0.0
+                    self.th = 0.0
+                    if (key == '\x03'):
+                        break
 
+                twist = geometry_msgs.msg.Twist()
+                twist.linear.x = self.x * self.speed
+                twist.linear.y = self.y * self.speed
+                twist.linear.z = self.z * self.speed
+                twist.angular.x = 0.0
+                twist.angular.y = 0.0
+                twist.angular.z = self.th * self.turn
+                self.publisher_.publish(twist)
 
-def vels(speed, turn):
-    return 'currently:\tspeed %s\tturn %s ' % (speed, turn)
+        except Exception as e:
+            print(e)
 
-
-def main():
-    settings = saveTerminalSettings()
-
-    rclpy.init()
-
-    node = rclpy.create_node('teleop_twist_keyboard')
-    pub = node.create_publisher(geometry_msgs.msg.Twist, 'cmd_vel', 10)
-
-    speed = 0.5
-    turn = 1.0
-    x = 0.0
-    y = 0.0
-    z = 0.0
-    th = 0.0
-    status = 0.0
-
-    try:
-        print(msg)
-        print(vels(speed, turn))
-        while True:
-            key = getKey(settings)
-            if key in moveBindings.keys():
-                x = moveBindings[key][0]
-                y = moveBindings[key][1]
-                z = moveBindings[key][2]
-                th = moveBindings[key][3]
-            elif key in speedBindings.keys():
-                speed = speed * speedBindings[key][0]
-                turn = turn * speedBindings[key][1]
-
-                print(vels(speed, turn))
-                if (status == 14):
-                    print(msg)
-                status = (status + 1) % 15
-            else:
-                x = 0.0
-                y = 0.0
-                z = 0.0
-                th = 0.0
-                if (key == '\x03'):
-                    break
-
+        finally:
             twist = geometry_msgs.msg.Twist()
-            twist.linear.x = x * speed
-            twist.linear.y = y * speed
-            twist.linear.z = z * speed
+            twist.linear.x = 0.0
+            twist.linear.y = 0.0
+            twist.linear.z = 0.0
             twist.angular.x = 0.0
             twist.angular.y = 0.0
-            twist.angular.z = th * turn
-            pub.publish(twist)
+            twist.angular.z = 0.0
+            self.publisher_.publish(twist)
 
-    except Exception as e:
-        print(e)
-
-    finally:
-        twist = geometry_msgs.msg.Twist()
-        twist.linear.x = 0.0
-        twist.linear.y = 0.0
-        twist.linear.z = 0.0
-        twist.angular.x = 0.0
-        twist.angular.y = 0.0
-        twist.angular.z = 0.0
-        pub.publish(twist)
-
-        restoreTerminalSettings(settings)
-
-
+            restoreTerminalSettings(self.settings)
+        
+def main(args=None):
+    rclpy.init(args=args)
+    node = publisherTeleop()
+    node.publish_teleop()
+    rclpy.spin(node) 
+    rclpy.shutdown()
+    
 if __name__ == '__main__':
     main()
